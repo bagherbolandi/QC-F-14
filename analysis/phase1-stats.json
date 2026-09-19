@@ -1,0 +1,235 @@
+{
+ "audit": {
+  "defined_names": [
+   [
+    "_xlnm._FilterDatabase",
+    "Data!$A$1:$I$1"
+   ],
+   [
+    "_xlnm.Print_Area",
+    "Data!$A$1:$AE$1927"
+   ],
+   [
+    "_xlnm.Print_Area",
+    "FORM!$A$1:$Q$29"
+   ]
+  ],
+  "workbook_protection": true,
+  "has_tables": false,
+  "has_pivots": false,
+  "has_powerquery": false,
+  "has_model": false,
+  "has_vba": true,
+  "external_links": [],
+  "vba_unprotected": true
+ },
+ "sheet1_protection": "<sheetProtection algorithmName=\"SHA-512\" hashValue=\"xOtLMQ/XlQj6fz6iTRjLNejQWDU76pCXbpeFljRrOkhI8/hdYdz54fusyvC5qbsLbsq3JHNlOtio6MCP5evVgw==\" saltValue=\"umNrN5dx1To0NBmYi2X5Bg==\" spinCount=\"100000\" sheet=\"1\" objects=\"1\" scenarios=\"1\"/>",
+ "sheet1_print_scale": "30",
+ "sheet1_formulas": [
+  "C5",
+  "C7",
+  "C9",
+  "E5",
+  "E7",
+  "G5",
+  "E9",
+  "E11",
+  "C11"
+ ],
+ "sheet1_volatile": 2,
+ "sheet2": {
+  "xml_bytes": 6747221,
+  "content_rows": 14560,
+  "phantom_styled_rows": 14957,
+  "custom_format_rows": 14957,
+  "merged": 0,
+  "dimension": "A1:I29517",
+  "protection": null,
+  "rtl": true,
+  "print_scale": "55"
+ },
+ "data": {
+  "records": 14557,
+  "blank_rows": [],
+  "distinct_تاریخ": 123,
+  "distinct_شیفت": 3,
+  "distinct_ایستگاه": 2,
+  "distinct_قطعه": 25,
+  "distinct_قالب": 7,
+  "distinct_بارکد": 14079,
+  "distinct_عیب": 20,
+  "distinct_وضعیت": 2,
+  "distinct_اپراتور": 18,
+  "whitespace_pollution": {
+   "اپراتور": {
+    "رجبی  ": 511,
+    "جمعی ": 918
+   },
+   "قطعه": {
+    "سینی زیر موتور سمند ": 368
+   }
+  },
+  "barcode": {
+   "n": 14557,
+   "distinct": 14079,
+   "len_hist": {
+    "19": 14557
+   },
+   "non_digit": 0,
+   "leading_zero": 9283,
+   "dup_groups": 463,
+   "dup_extra_rows": 478,
+   "max_repeat": 4
+  },
+  "exact_duplicates": {
+   "groups": 89,
+   "extra_rows": 89,
+   "consecutive_groups": 58
+  },
+  "dates": {
+   "days": 123,
+   "min": "2026-04-20",
+   "max": "2026-09-19",
+   "per_day_avg": 118.3,
+   "per_day_max": 433,
+   "projection_300_workdays": 35505
+  },
+  "crosstab": {
+   "وضعیت×ایستگاه": {
+    "اصلاحی | کنترل نهایی": 12814,
+    "ضایعات | کنترل نهایی": 1645,
+    "اصلاحی | برگشت از فروش": 98
+   },
+   "وضعیت×شیفت": {
+    "اصلاحی | 1": 6934,
+    "اصلاحی | 2": 4652,
+    "اصلاحی | 3": 1326,
+    "ضایعات | 1": 759,
+    "ضایعات | 2": 594,
+    "ضایعات | 3": 292
+   }
+  },
+  "barcode_prefix_part_purity": {
+   "سینی فن سمند": {
+    "n": 3594,
+    "codes": {
+     "02": 3515,
+     "01": 36,
+     "24": 23
+    },
+    "top_share": 97.8
+   },
+   "سینی فن 206": {
+    "n": 2892,
+    "codes": {
+     "04": 2887,
+     "05": 5
+    },
+    "top_share": 99.8
+   },
+   "سینی فن 405": {
+    "n": 2541,
+    "codes": {
+     "01": 2497,
+     "10": 20,
+     "13": 17
+    },
+    "top_share": 98.3
+   },
+   "سینی فن دنا": {
+    "n": 2128,
+    "codes": {
+     "24": 2102,
+     "01": 10,
+     "14": 10
+    },
+    "top_share": 98.8
+   },
+   "محافظ شیشه آریسان": {
+    "n": 1083,
+    "codes": {
+     "12": 1080,
+     "01": 3
+    },
+    "top_share": 99.7
+   },
+   "سینی زیر موتور206": {
+    "n": 401,
+    "codes": {
+     "20": 382,
+     "04": 10,
+     "02": 9
+    },
+    "top_share": 95.3
+   },
+   "سینی فن آریسان": {
+    "n": 380,
+    "codes": {
+     "13": 376,
+     "02": 4
+    },
+    "top_share": 98.9
+   },
+   "سینی زیر موتور سمند": {
+    "n": 368,
+    "codes": {
+     "05": 363,
+     "20": 3,
+     "04": 2
+    },
+    "top_share": 98.6
+   },
+   "سینی زیر موتور EF7": {
+    "n": 203,
+    "codes": {
+     "05": 198,
+     "10": 5
+    },
+    "top_share": 97.5
+   },
+   "دفلکتور": {
+    "n": 183,
+    "codes": {
+     "29": 82,
+     "30": 75,
+     "27": 23
+    },
+    "top_share": 44.8
+   },
+   "فلپ": {
+    "n": 161,
+    "codes": {
+     "37": 83,
+     "35": 78
+    },
+    "top_share": 51.6
+   },
+   "سینی زیر موتور K132": {
+    "n": 133,
+    "codes": {
+     "21": 115,
+     "02": 18
+    },
+    "top_share": 86.5
+   }
+  }
+ },
+ "parts": {
+  "[Content_Types].xml": 2082,
+  "xl/workbook.xml": 2950,
+  "xl/_rels/workbook.xml.rels": 1235,
+  "xl/worksheets/sheet1.xml": 15017,
+  "xl/worksheets/sheet2.xml": 6747221,
+  "xl/worksheets/sheet3.xml": 1821,
+  "xl/theme/theme1.xml": 8721,
+  "xl/styles.xml": 12204,
+  "xl/sharedStrings.xml": 496562,
+  "xl/drawings/drawing1.xml": 2279,
+  "xl/drawings/vmlDrawing1.vml": 1582,
+  "xl/vbaProject.bin": 26112,
+  "xl/printerSettings/printerSettings1.bin": 5420,
+  "xl/printerSettings/printerSettings2.bin": 4821,
+  "xl/printerSettings/printerSettings3.bin": 5420,
+  "docProps/app.xml": 1004
+ }
+}

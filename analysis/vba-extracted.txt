@@ -1,0 +1,103 @@
+olevba 0.60.2 on Python 3.11.2 - http://decalage.info/python/oletools
+===============================================================================
+FILE: FORM-QC-F-14.xlsm
+Type: OpenXML
+WARNING  For now, VBA stomping cannot be detected for files in memory
+-------------------------------------------------------------------------------
+VBA MACRO Module1.bas 
+in file: xl/vbaProject.bin - OLE stream: 'VBA/Module1'
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+Sub Sabt_Form()
+
+    ' Validate required Data Validation cells
+    If WorksheetFunction.CountA(Sheets("FORM").Range("C5,C7,C9,C11,E5,E7,E9,E11,G5")) < 9 Then
+        MsgBox "Please complete all required fields before submitting.", _
+               vbCritical, "Validation Error"
+        Exit Sub
+    End If
+
+    ' ==============================
+    ' NO MESSAGE IF FORM IS COMPLETE
+
+'
+' AUTO Macro
+'
+
+'
+    Range("C15:C23").Select
+    Selection.Copy
+    Sheets("AUTO").Select
+    Range("A1").Select
+    Selection.PasteSpecial Paste:=xlPasteValues, Operation:=xlNone, SkipBlanks _
+        :=False, Transpose:=True
+    Application.CutCopyMode = False
+    Selection.Copy
+    Sheets("Data").Select
+    Range("A2").Select
+    Selection.Insert Shift:=xlDown
+    Sheets("FORM").Select
+    ActiveWindow.SmallScroll Down:=-11
+    Application.CutCopyMode = False
+    Range("E11").Select
+    Selection.ClearContents
+    Range("E9").Select
+    Selection.ClearContents
+   
+End Sub
+-------------------------------------------------------------------------------
+VBA MACRO ThisWorkbook.cls 
+in file: xl/vbaProject.bin - OLE stream: 'VBA/ThisWorkbook'
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+Private Sub Workbook_BeforeClose(Cancel As Boolean)
+
+    ' ????? ?????? ?? ??? ???? ????? ???? ??? (SavedChanges:=False)
+    ' ??? ????? ???? ????? ?? ?? ????? ?????? (True) ? ????? ????? ????? ???? ??????? (False)
+    ThisWorkbook.Save
+    
+    End Sub
+Private Sub Workbook_Open()
+
+' ???? ???? ?????
+Application.ExecuteExcel4Macro "SHOW.TOOLBAR(""Ribbon"", False)"
+
+' ???? ???? ?????????
+Application.DisplayFormulaBar = False
+
+' ???? ???? ???? ????? ?????
+Application.DisplayStatusBar = False
+
+' ??? ???? ???? Ctrl+O, Ctrl+N ?...
+Application.OnKey "^o", ""
+Application.OnKey "^n", ""
+Application.OnKey "%{F11}", ""
+Application.OnKey "%{f8}", ""
+Application.OnKey "%{f10}", ""
+Application.OnKey "%{f12}", ""
+
+' ??????? ???? ???? ????
+Application.CommandBars("Cell").Enabled = False
+Application.CommandBars("Ply").Enabled = False
+Application.CommandBars("Worksheet Menu Bar").Enabled = False
+
+' ???? ???? ?????
+ActiveWindow.DisplayWorkbookTabs = False
+
+End Sub
+
+-------------------------------------------------------------------------------
+VBA MACRO Sheet1.cls 
+in file: xl/vbaProject.bin - OLE stream: 'VBA/Sheet1'
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+(empty macro)
+-------------------------------------------------------------------------------
+VBA MACRO Sheet2.cls 
+in file: xl/vbaProject.bin - OLE stream: 'VBA/Sheet2'
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+(empty macro)
+-------------------------------------------------------------------------------
+VBA MACRO Sheet3.cls 
+in file: xl/vbaProject.bin - OLE stream: 'VBA/Sheet3'
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+(empty macro)
+
