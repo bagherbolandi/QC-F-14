@@ -1,0 +1,6 @@
+# فایل‌های دودویی/متنیِ حساس به خط‌پایان
+*.xlsx binary
+*.xlsm binary
+*.bas text eol=crlf
+*.md text eol=lf
+*.py text eol=lf

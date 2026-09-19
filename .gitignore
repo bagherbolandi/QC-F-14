@@ -1,3 +1,11 @@
 # فایل‌های واسط تحلیل/بازآفرینی (محتوای داده‌ای در Git نماند)
 analysis/data-dump.json
 analysis/*.bak
+
+# فایل‌های میانیِ ابزارها (بازسازی‌شدنی، نه بخشی از خروجی)
+analysis/cache/
+analysis/payload.json
+
+# کشِ ابزارها
+__pycache__/
+*.pyc
