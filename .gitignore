@@ -5,6 +5,7 @@ analysis/*.bak
 # فایل‌های میانیِ ابزارها (بازسازی‌شدنی، نه بخشی از خروجی)
 analysis/cache/
 analysis/payload.json
+analysis/payload_v3.json
 
 # کشِ ابزارها
 __pycache__/
