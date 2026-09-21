@@ -1,34 +1,8 @@
 Attribute VB_Name = "QC_Full_v4"
 Option Explicit
 '=======================================================================
-'  QC-F-14  v4.0  --  WRITE PATH + ROLE-BASED LOGIN (VeryHidden)
-'-----------------------------------------------------------------------
-'  SECURITY NOTE: Excel sheet protection / VeryHidden is NOT real
-'  security. Passwords are Plain Text in USERS sheet. This is only
-'  a deterrent for operators. For real security -> SQL/Web.
-'
-'  ROLES:
-'    ADMIN    -> all sheets visible (Data, Master, Reports, Dashboard,
-'                DQ, Settings, Help, LOG_AUDIT, USERS, FORM, STAGING)
-'    OPERATOR -> FORM + STAGING + Help + LOGIN only
-'    VIEWER   -> Dashboard + Reports + DQ + Help + LOGIN only
-'
-'  LOGIN SHEET:  LOGIN ورود
-'    C6 = username input
-'    C8 = password input
-'    C10 = message
-'    C12 = current user
-'    C13 = current role
-'
-'  USERS SHEET: USERS کاربران (VeryHidden)
-'    Table TBL_USERS (or DIM_USER) with CODE,USERNAME,PASSWORD,ROLE,
-'    DISPLAY_NAME,ACTIVE
-'
-'  FLOW:
-'    Workbook_Open / Auto_Open -> HideAllExceptLogin
-'    QC_Login -> validate -> ShowSheetsByRole
-'    QC_Logout -> HideAllExceptLogin
-'    Failed attempts logged to LOG_AUDIT
+'  QC-F-14  v4.1  --  FIXED: Subscript out of range on login
+'  Changes: robust column lookup, On Error handling for VeryHidden
 '=======================================================================
 
 Private Const TBL_QC As String = "tblQC"
@@ -61,16 +35,8 @@ Private Const RT_INSPECTION As Long = 1
 Private Const RT_REINSPECTION As Long = 2
 Private Const RT_RETURN As Long = 3
 
-Private Const RES_OK As Long = 1
-Private Const RES_NOK As Long = 2
+Public Const QC_VERSION As String = "4.1.0-login-fixed"
 
-Public Const QC_VERSION As String = "4.0.0-login-writepath"
-
-'-----------------------------------------------------------------------
-' Auto_Open - runs when workbook opens if macros enabled
-' Hides all sheets except LOGIN (VeryHidden for admin sheets)
-' Also called by Workbook_Open in ThisWorkbook
-'-----------------------------------------------------------------------
 Public Sub Auto_Open()
     On Error Resume Next
     HideAllExceptLogin
@@ -81,28 +47,21 @@ Public Sub Workbook_Open_Handler()
     Auto_Open
 End Sub
 
-'-----------------------------------------------------------------------
-' HideAllExceptLogin - initial state: only LOGIN visible
-'-----------------------------------------------------------------------
 Public Sub HideAllExceptLogin()
     Dim ws As Worksheet
     Dim loginName As String
-    Dim nm As String
-    
     On Error GoTo Fail
     loginName = GetSheetName("LOGIN")
     If Len(loginName) = 0 Then loginName = "LOGIN ورود"
-    
     For Each ws In ThisWorkbook.Worksheets
+        On Error Resume Next
         If ws.Name = loginName Then
             ws.Visible = xlSheetVisible
         Else
-            ' VeryHidden so user cannot unhide via UI
             ws.Visible = xlSheetVeryHidden
         End If
+        On Error GoTo Fail
     Next ws
-    
-    ' Clear current user display on LOGIN
     On Error Resume Next
     Dim wsL As Worksheet
     Set wsL = ThisWorkbook.Worksheets(loginName)
@@ -110,19 +69,25 @@ Public Sub HideAllExceptLogin()
         wsL.Range("C12").Value = "(not logged in)"
         wsL.Range("C13").Value = ""
         wsL.Range("C10").Value = "Please login"
-        wsL.Range("C6").Value = ""
-        wsL.Range("C8").Value = ""
     End If
     On Error GoTo 0
     Exit Sub
 Fail:
-    ' silent fail on open
 End Sub
 
-'-----------------------------------------------------------------------
-' QC_Login - main login routine
-' Reads C6=user, C8=pass from LOGIN sheet, validates against USERS
-'-----------------------------------------------------------------------
+' Helper: get column index by name (case insensitive)
+Private Function ColIdxByName(ByVal lo As ListObject, ByVal colName As String) As Long
+    Dim i As Long
+    ColIdxByName = 0
+    If lo Is Nothing Then Exit Function
+    For i = 1 To lo.ListColumns.Count
+        If UCase$(Trim$(lo.ListColumns(i).Name)) = UCase$(Trim$(colName)) Then
+            ColIdxByName = i
+            Exit Function
+        End If
+    Next i
+End Function
+
 Public Sub QC_Login()
     Dim wsL As Worksheet
     Dim wsU As Worksheet
@@ -132,99 +97,126 @@ Public Sub QC_Login()
     Dim lo As ListObject
     Dim i As Long
     Dim loginName As String
+    Dim idxUser As Long, idxPass As Long, idxRole As Long, idxActive As Long, idxDisp As Long
     
     On Error GoTo Fail
     loginName = GetSheetName("LOGIN")
-    If Len(loginName) = 0 Then
-        MsgBox "LOGIN sheet not found", vbExclamation
+    If Len(loginName) = 0 Then loginName = "LOGIN ورود"
+    On Error Resume Next
+    Set wsL = ThisWorkbook.Worksheets(loginName)
+    On Error GoTo Fail
+    If wsL Is Nothing Then
+        MsgBox "LOGIN sheet not found: " & loginName, vbExclamation
         Exit Sub
     End If
-    Set wsL = ThisWorkbook.Worksheets(loginName)
     
     userIn = Trim$(CStr(wsL.Range("C6").Value))
     passIn = Trim$(CStr(wsL.Range("C8").Value))
     
     If Len(userIn) = 0 Or Len(passIn) = 0 Then
-        wsL.Range("C10").Value = MsgFallback("E_LOGIN", "Invalid login - empty")
+        wsL.Range("C10").Value = "Invalid login - empty"
         Beep
-        MsgBox MsgFallback("E_LOGIN", "Username or password wrong"), vbExclamation, "Login"
-        LogLine "LOGIN", "LOGIN_FAIL", "USER", "", userIn & " | empty"
+        MsgBox "Username or password empty", vbExclamation, "Login"
         Exit Sub
     End If
     
-    ' Find USERS sheet
-    Dim usersSheetName As String
-    usersSheetName = GetSheetName("USERS")
-    If Len(usersSheetName) = 0 Then usersSheetName = "USERS کاربران"
-    
+    ' Find USERS sheet - try all possible
+    Set wsU = Nothing
     On Error Resume Next
-    Set wsU = ThisWorkbook.Worksheets(usersSheetName)
+    Set wsU = ThisWorkbook.Worksheets("USERS کاربران")
+    If wsU Is Nothing Then Set wsU = ThisWorkbook.Worksheets(GetSheetName("USERS"))
+    If wsU Is Nothing Then Set wsU = ThisWorkbook.Worksheets("USERS")
+    If wsU Is Nothing Then Set wsU = GetMasterSheet()
     On Error GoTo Fail
     
     If wsU Is Nothing Then
-        ' fallback to Master DIM_USER
-        Set wsU = GetMasterSheet()
-        If wsU Is Nothing Then
-            MsgBox MsgFallback("E_CONFIG", "Config missing") & " USERS", vbExclamation
-            Exit Sub
-        End If
+        MsgBox "USERS sheet not found", vbExclamation
+        Exit Sub
     End If
     
-    ' Try TBL_USERS first, then DIM_USER
+    ' Find table
     Set lo = Nothing
     On Error Resume Next
     Set lo = wsU.ListObjects(TBL_USERS)
     If lo Is Nothing Then Set lo = wsU.ListObjects(TBL_USERS_ALT)
-    ' If still nothing and wsU is Master, try Master DIM_USER
     If lo Is Nothing Then
         Dim wsM As Worksheet
         Set wsM = GetMasterSheet()
         If Not wsM Is Nothing Then
             Set lo = wsM.ListObjects(TBL_USERS_ALT)
+            If lo Is Nothing Then Set lo = wsM.ListObjects(TBL_USERS)
         End If
     End If
     On Error GoTo Fail
     
     If lo Is Nothing Then
-        MsgBox "Users table not found (TBL_USERS / DIM_USER)", vbExclamation
+        MsgBox "Users table not found. Looked for TBL_USERS and DIM_USER in " & wsU.Name, vbExclamation
+        Exit Sub
+    End If
+    
+    If lo.ListRows.Count = 0 Then
+        MsgBox "Users table empty: " & lo.Name, vbExclamation
+        Exit Sub
+    End If
+    
+    ' Get column indexes robustly
+    idxUser = ColIdxByName(lo, "USERNAME")
+    idxPass = ColIdxByName(lo, "PASSWORD")
+    idxRole = ColIdxByName(lo, "ROLE")
+    idxActive = ColIdxByName(lo, "ACTIVE")
+    idxDisp = ColIdxByName(lo, "DISPLAY_NAME")
+    
+    If idxUser = 0 Or idxPass = 0 Or idxRole = 0 Then
+        MsgBox "Users table columns missing. Found: " & lo.ListColumns.Count & " cols. Need USERNAME,PASSWORD,ROLE. Got USER idx=" & idxUser & " PASS idx=" & idxPass & " ROLE idx=" & idxRole, vbExclamation
         Exit Sub
     End If
     
     found = False
     For i = 1 To lo.ListRows.Count
-        uname = Trim$(CStr(lo.ListColumns("USERNAME").DataBodyRange.Cells(i, 1).Value))
+        On Error Resume Next
+        uname = Trim$(CStr(lo.ListColumns(idxUser).DataBodyRange.Cells(i, 1).Value))
+        If Err.Number <> 0 Then
+            Err.Clear
+            GoTo NextRow
+        End If
+        On Error GoTo Fail
         If LCase$(uname) = LCase$(userIn) Then
-            pwd = Trim$(CStr(lo.ListColumns("PASSWORD").DataBodyRange.Cells(i, 1).Value))
-            role = UCase$(Trim$(CStr(lo.ListColumns("ROLE").DataBodyRange.Cells(i, 1).Value)))
-            active = Trim$(CStr(lo.ListColumns("ACTIVE").DataBodyRange.Cells(i, 1).Value))
-            dispName = Trim$(CStr(lo.ListColumns("DISPLAY_NAME").DataBodyRange.Cells(i, 1).Value))
+            pwd = Trim$(CStr(lo.ListColumns(idxPass).DataBodyRange.Cells(i, 1).Value))
+            role = UCase$(Trim$(CStr(lo.ListColumns(idxRole).DataBodyRange.Cells(i, 1).Value)))
+            If idxActive > 0 Then
+                active = Trim$(CStr(lo.ListColumns(idxActive).DataBodyRange.Cells(i, 1).Value))
+            Else
+                active = "بله"
+            End If
+            If idxDisp > 0 Then
+                dispName = Trim$(CStr(lo.ListColumns(idxDisp).DataBodyRange.Cells(i, 1).Value))
+            End If
             If Len(dispName) = 0 Then dispName = uname
             found = True
             Exit For
         End If
+NextRow:
     Next i
     
     If Not found Then
-        wsL.Range("C10").Value = MsgFallback("E_LOGIN", "Invalid username or password")
+        wsL.Range("C10").Value = "Invalid username or password"
         Beep
-        MsgBox MsgFallback("E_LOGIN", "Invalid username or password"), vbExclamation, "Login"
+        MsgBox "Invalid username or password: " & userIn, vbExclamation, "Login"
         LogLine "LOGIN", "LOGIN_FAIL", "USER", "", userIn & " | not found"
         Exit Sub
     End If
     
-    ' Check active
     If IsInactive(active) Then
-        wsL.Range("C10").Value = MsgFallback("E_LOGIN_INACTIVE", "User inactive")
-        MsgBox MsgFallback("E_LOGIN_INACTIVE", "User inactive"), vbExclamation, "Login"
+        wsL.Range("C10").Value = "User inactive"
+        MsgBox "User inactive: " & userIn, vbExclamation, "Login"
         LogLine userIn, "LOGIN_FAIL", "INACTIVE", "", role
         Exit Sub
     End If
     
-    ' Check password (case sensitive)
     If pwd <> passIn Then
-        wsL.Range("C10").Value = MsgFallback("E_LOGIN", "Invalid username or password")
+        wsL.Range("C10").Value = "Invalid username or password"
         Beep
-        MsgBox MsgFallback("E_LOGIN", "Invalid username or password"), vbExclamation, "Login"
+        MsgBox "Invalid password for " & userIn, vbExclamation, "Login"
         LogLine userIn, "LOGIN_FAIL", "PASSWORD", "", "wrong password"
         Exit Sub
     End If
@@ -232,59 +224,37 @@ Public Sub QC_Login()
     ' Success
     wsL.Range("C12").Value = userIn & " (" & dispName & ")"
     wsL.Range("C13").Value = role
-    
-    Dim msgKey As String
-    Select Case role
-        Case "ADMIN"
-            msgKey = "OK_LOGIN_ADMIN"
-        Case "OPERATOR"
-            msgKey = "OK_LOGIN_OPERATOR"
-        Case "VIEWER"
-            msgKey = "OK_LOGIN_VIEWER"
-        Case Else
-            msgKey = "OK_LOGIN_VIEWER"
-    End Select
-    
-    wsL.Range("C10").Value = MsgFallback(msgKey, "Login OK - " & role)
+    wsL.Range("C10").Value = "Login OK - " & role
     
     ShowSheetsByRole role
-    
     LogLine userIn, "LOGIN_OK", "ROLE", "", role
-    
-    MsgBox MsgFallback(msgKey, "Login OK - " & role) & vbCrLf & userIn & " / " & role, vbInformation, "QC-F-14 Login"
+    MsgBox "Login OK - " & role & vbCrLf & userIn & " / " & role, vbInformation, "QC-F-14 Login"
     Exit Sub
 Fail:
-    FailNow "Login error " & Err.Number & ": " & Err.Description
+    MsgBox "Login error " & Err.Number & ": " & Err.Description & vbCrLf & "at line: " & Erl, vbExclamation, "QC-F-14 v4 - nothing written"
+    Err.Clear
 End Sub
 
-'-----------------------------------------------------------------------
-' QC_Logout - hide all except LOGIN
-'-----------------------------------------------------------------------
 Public Sub QC_Logout()
     Dim wsL As Worksheet
     Dim loginName As String
     Dim curUser As String
-    
     On Error GoTo Fail
     loginName = GetSheetName("LOGIN")
-    If Len(loginName) = 0 Then Exit Sub
+    If Len(loginName) = 0 Then loginName = "LOGIN ورود"
     Set wsL = ThisWorkbook.Worksheets(loginName)
-    
     curUser = Trim$(CStr(wsL.Range("C12").Value))
     If Len(curUser) = 0 Or curUser = "(not logged in)" Or InStr(curUser, "not logged") > 0 Then
-        MsgBox MsgFallback("E_LOGOUT", "Not logged in"), vbExclamation, "Logout"
+        MsgBox "Not logged in", vbExclamation, "Logout"
         Exit Sub
     End If
-    
     LogLine curUser, "LOGOUT", "USER", "", ""
-    
     HideAllExceptLogin
-    
-    wsL.Range("C10").Value = MsgFallback("OK_LOGOUT", "Logged out - only LOGIN visible")
-    MsgBox MsgFallback("OK_LOGOUT", "Logged out"), vbInformation, "QC-F-14"
+    wsL.Range("C10").Value = "Logged out - only LOGIN visible"
+    MsgBox "Logged out", vbInformation, "QC-F-14"
     Exit Sub
 Fail:
-    FailNow "Logout error " & Err.Number & ": " & Err.Description
+    MsgBox "Logout error " & Err.Number & ": " & Err.Description, vbExclamation
 End Sub
 
 Private Function IsInactive(ByVal activeVal As String) As Boolean
@@ -301,39 +271,50 @@ End Function
 
 Private Sub ShowSheetsByRole(ByVal role As String)
     Dim ws As Worksheet
-    Dim dict As Object
     Dim loginName As String, formName As String, stagingName As String
     Dim dataName As String, masterName As String, reportsName As String
     Dim dashName As String, dqName As String, setName As String
     Dim helpName As String, logName As String, usersName As String
     Dim helperName As String, verifyName As String
     
+    On Error Resume Next
     loginName = GetSheetName("LOGIN")
+    If Len(loginName) = 0 Then loginName = "LOGIN ورود"
     formName = GetSheetName("FORM")
+    If Len(formName) = 0 Then formName = "FORM فرم ثبت"
     stagingName = GetSheetName("STAGING")
+    If Len(stagingName) = 0 Then stagingName = "STAGING ورود اضطراری"
     dataName = GetSheetName("DATA")
+    If Len(dataName) = 0 Then dataName = "Data داده"
     masterName = GetSheetName("MASTER")
+    If Len(masterName) = 0 Then masterName = "Master اطلاعات پایه"
     reportsName = GetSheetName("REPORTS")
+    If Len(reportsName) = 0 Then reportsName = "Reports گزارش‌ها"
     dashName = GetSheetName("DASH")
+    If Len(dashName) = 0 Then dashName = "Dashboard داشبورد"
     dqName = GetSheetName("DQ")
+    If Len(dqName) = 0 Then dqName = "DQ کیفیت داده"
     setName = GetSheetName("SETTINGS")
+    If Len(setName) = 0 Then setName = "Settings تنظیمات"
     helpName = GetSheetName("HELP")
+    If Len(helpName) = 0 Then helpName = "Help راهنما"
     logName = GetSheetName("LOG")
+    If Len(logName) = 0 Then logName = "LOG_AUDIT"
     usersName = GetSheetName("USERS")
+    If Len(usersName) = 0 Then usersName = "USERS کاربران"
     helperName = GetSheetName("HELPER")
+    If Len(helperName) = 0 Then helperName = "Helper محاسبات"
     verifyName = GetSheetName("VERIFY")
+    If Len(verifyName) = 0 Then verifyName = "Verify"
+    On Error GoTo 0
     
     role = UCase$(Trim$(role))
     
     For Each ws In ThisWorkbook.Worksheets
+        On Error Resume Next
         Select Case role
             Case "ADMIN"
-                ' ADMIN sees all
                 ws.Visible = xlSheetVisible
-                If ws.Name = helperName Or ws.Name = verifyName Then
-                    ' keep helper hidden but admin can unhide if needed? Make visible for admin
-                    ws.Visible = xlSheetVisible
-                End If
             Case "OPERATOR"
                 If ws.Name = loginName Or ws.Name = formName Or ws.Name = stagingName Or ws.Name = helpName Then
                     ws.Visible = xlSheetVisible
@@ -347,16 +328,15 @@ Private Sub ShowSheetsByRole(ByVal role As String)
                     ws.Visible = xlSheetVeryHidden
                 End If
             Case Else
-                ' unknown role -> only LOGIN
                 If ws.Name = loginName Then
                     ws.Visible = xlSheetVisible
                 Else
                     ws.Visible = xlSheetVeryHidden
                 End If
         End Select
+        On Error GoTo 0
     Next ws
     
-    ' Ensure LOGIN always visible and active
     On Error Resume Next
     ThisWorkbook.Worksheets(loginName).Visible = xlSheetVisible
     ThisWorkbook.Worksheets(loginName).Activate
@@ -369,7 +349,6 @@ Private Function GetSheetName(ByVal key As String) As String
     s = Cfg(CFG_SHEETS, key)
     On Error GoTo 0
     If Len(s) = 0 Then
-        ' fallback hardcoded
         Select Case UCase$(key)
             Case "LOGIN": s = "LOGIN ورود"
             Case "FORM": s = "FORM فرم ثبت"
@@ -393,14 +372,13 @@ End Function
 Private Function GetMasterSheet() As Worksheet
     Dim nm As String
     nm = GetSheetName("MASTER")
+    If Len(nm) = 0 Then nm = "Master اطلاعات پایه"
     On Error Resume Next
     Set GetMasterSheet = ThisWorkbook.Worksheets(nm)
     On Error GoTo 0
 End Function
 
-'=======================================================================
-' WRITE PATH (from v3) - unchanged logic, but UserName now uses logged user
-'=======================================================================
+' === WRITE PATH (same as before) ===
 Public Sub QC_Append()
     Dim wsD As Worksheet, wsF As Worksheet
     Dim pickDate As String, pickShift As String, pickStation As String, pickStationName As String
@@ -414,11 +392,9 @@ Public Sub QC_Append()
     Dim codePart As String, codeMold As String, codeDefect As String
     Dim etLegacy As String, recType As String, curStatus As String
     Dim dups As Long, r As Long
-
     On Error GoTo Fail
     Set wsF = SheetAt("FORM")
     Set wsD = SheetAt("DATA")
-
     pickDate = CellTxt(wsF, "C6")
     pickShift = CellTxt(wsF, "C8")
     pickStation = CellTxt(wsF, "C10")
@@ -431,7 +407,6 @@ Public Sub QC_Append()
     pickDisp = CellTxt(wsF, "F14")
     pickStatus = CellTxt(wsF, "C16")
     pickNote = CellTxt(wsF, "F16")
-
     codeShift = PickCode(pickShift)
     codeStation = PickCode(pickStation)
     pickStationName = PickName(pickStation)
@@ -443,22 +418,17 @@ Public Sub QC_Append()
     pickMoldName = PickName(pickMold)
     codeDefect = PickCode(pickDefect)
     pickDefectName = PickName(pickDefect)
-
     If Len(pickDate) = 0 Or Len(codeShift) = 0 Or Len(codeStation) = 0 Or Len(codeInspector) = 0 _
        Or Len(codePart) = 0 Or Len(codeMold) = 0 Or Len(pickBarcode) = 0 _
        Or Len(PickCode(pickResult)) = 0 Or Len(PickCode(pickDisp)) = 0 Then
         FailNow MsgFallback("E_INCOMPLETE", "Incomplete") & vbCrLf & CellTxt(wsF, "C28")
         Exit Sub
     End If
-
     If Len(pickBarcode) <> BC_LEN Or Not AllDigits(pickBarcode) Then FailNow MsgFallback("E_BARCODE", "Barcode must be 19 digits"): Exit Sub
-
     Dim gi As Variant
     gi = Application.Match(pickDate, GridRange("CODE_J_TEXT"), 0)
     If IsError(gi) Then FailNow MsgFallback("E_DATE", "Invalid J date"): Exit Sub
-
     dups = Application.WorksheetFunction.CountIf(QcCol(wsD, "BARCODE"), pickBarcode)
-
     If InStr(1, pickStationName, "Return", vbTextCompare) > 0 Or codeStation = "ST-08" Then
         recType = GridVal(GRID_RECTYPE, RT_RETURN)
     ElseIf dups > 0 Then
@@ -466,7 +436,6 @@ Public Sub QC_Append()
     Else
         recType = GridVal(GRID_RECTYPE, RT_INSPECTION)
     End If
-
     Dim resCode As String, resName As String
     resCode = PickCode(pickResult)
     resName = PickName(pickResult)
@@ -479,36 +448,30 @@ Public Sub QC_Append()
         FailNow "RULE-02: NOK without defect not allowed"
         Exit Sub
     End If
-
     Dim dispCode As String, dispName As String
     dispCode = PickCode(pickDisp)
     dispName = PickName(pickDisp)
     If Len(dispName) = 0 Then dispName = dispCode
-
     If Len(PickCode(pickStatus)) > 0 Then
         curStatus = PickName(pickStatus)
         If Len(curStatus) = 0 Then curStatus = PickCode(pickStatus)
     Else
         If dispName = "REWORK" Then
-            curStatus = GridVal(GRID_STATUS, STAT_UNDER)
+            curStatus = GridVal(GRID_STATUS, 2)
         ElseIf dispName = "HOLD" Then
-            curStatus = GridVal(GRID_STATUS, STAT_OPEN)
+            curStatus = GridVal(GRID_STATUS, 1)
         Else
-            curStatus = GridVal(GRID_STATUS, STAT_CLOSED)
+            curStatus = GridVal(GRID_STATUS, 4)
         End If
     End If
-
     etLegacy = DispRuleOld(codeStation)
     If Len(etLegacy) = 0 Then etLegacy = StationRule(codeStation)
     If Len(etLegacy) = 0 Then etLegacy = "اصلاحی"
-
     Dim rowStat As String
     rowStat = GridVal(GRID_STAT, ST_OK)
     If dups > 0 Then rowStat = GridVal(GRID_STAT, ST_DUP)
-
     r = NextDataRow(wsD)
     If r = 0 Then FailNow MsgFallback("E_CAPACITY", "Capacity full"): Exit Sub
-
     WriteRowV3 wsD, r, pickDate, CLng(GridAt("QC_CAL_G", CLng(gi))), _
                GridAt("QC_CAL_MK", CLng(gi)), GridAt("QC_CAL_WK", CLng(gi)), _
                codeShift, codeStation, pickStationName, _
@@ -519,13 +482,10 @@ Public Sub QC_Append()
                resName, codeDefect, pickDefectName, _
                dispName, curStatus, _
                rowStat, pickNote, recType, etLegacy
-
     LogLine QcText(wsD, "RECORD_ID", r), "APPEND", "BARCODE", "", pickBarcode & " | " & recType & " | " & dispName
-
     wsF.Range("C14").ClearContents
     wsF.Range("F16").ClearContents
     Application.GoTo wsF.Range("C14"), False
-
     Dim ok As String
     ok = MsgFallback("OK_APPEND", "Appended") & " " & QcText(wsD, "RECORD_ID", r) & " (" & recType & ")"
     If dups > 0 Then ok = ok & vbCrLf & MsgFallback("E_DUP_ACT", "Duplicate flagged")
@@ -544,11 +504,9 @@ Public Sub QC_Import_Staging()
     Dim codeMold As String, pickMoldName As String
     Dim pickBarcode As String, resName As String, codeDefect As String, pickDefectName As String
     Dim dispName As String, curStatus As String, gi As Variant, recType As String
-
     On Error GoTo Fail
     Set wsS = SheetAt("STAGING")
     Set wsD = SheetAt("DATA")
-
     For r = 8 To 207
         If InStr(1, CellTxt(wsS, "L" & r), "Import", vbTextCompare) > 0 Then
             pickDate = CellTxt(wsS, "B" & r)
@@ -569,14 +527,12 @@ Public Sub QC_Import_Staging()
             dispName = PickName(CellTxt(wsS, "K" & r))
             If Len(dispName) = 0 Then dispName = PickCode(CellTxt(wsS, "K" & r))
             curStatus = PickName(CellTxt(wsS, "L" & r))
-
             If Len(pickDate) = 0 Or Len(codeShift) = 0 Or Len(codeStation) = 0 Or Len(pickBarcode) = 0 Then
                 FailNow MsgFallback("E_INCOMPLETE", "Incomplete") & " row " & r: Exit Sub
             End If
             If Len(pickBarcode) <> BC_LEN Or Not AllDigits(pickBarcode) Then FailNow MsgFallback("E_BARCODE", "Barcode 19") & " row " & r: Exit Sub
             gi = Application.Match(pickDate, GridRange("CODE_J_TEXT"), 0)
             If IsError(gi) Then FailNow MsgFallback("E_DATE", "Invalid date") & " row " & r: Exit Sub
-
             dups = Application.WorksheetFunction.CountIf(QcCol(wsD, "BARCODE"), pickBarcode)
             If InStr(1, pickStationName, "Return", vbTextCompare) > 0 Then
                 recType = GridVal(GRID_RECTYPE, RT_RETURN)
@@ -586,12 +542,10 @@ Public Sub QC_Import_Staging()
                 recType = GridVal(GRID_RECTYPE, RT_INSPECTION)
             End If
             If Len(curStatus) = 0 Then
-                If dispName = "REWORK" Then curStatus = GridVal(GRID_STATUS, STAT_UNDER) Else curStatus = GridVal(GRID_STATUS, STAT_CLOSED)
+                If dispName = "REWORK" Then curStatus = GridVal(GRID_STATUS, 2) Else curStatus = GridVal(GRID_STATUS, 4)
             End If
-
             tgt = NextDataRow(wsD)
             If tgt = 0 Then FailNow MsgFallback("E_CAPACITY", "Capacity"): Exit Sub
-
             WriteRowV3 wsD, tgt, pickDate, CLng(GridAt("QC_CAL_G", CLng(gi))), _
                        GridAt("QC_CAL_MK", CLng(gi)), GridAt("QC_CAL_WK", CLng(gi)), _
                        codeShift, codeStation, pickStationName, _
@@ -602,7 +556,6 @@ Public Sub QC_Import_Staging()
                        resName, codeDefect, pickDefectName, _
                        dispName, curStatus, _
                        GridVal(GRID_STAT, IIf(dups > 0, ST_DUP, ST_OK)), "", recType, ""
-
             wsS.Range("B" & r & ":L" & r).ClearContents
             n = n + 1
         End If
@@ -626,7 +579,7 @@ Public Sub QC_VoidRow()
     r = Selection.Row
     reason = InputBox("Enter void reason (required):", "Void Reason")
     If Len(Trim$(reason)) = 0 Then MsgBox "Void without reason not allowed (RULE-07)", vbExclamation: Exit Sub
-    PutText wsD, r, "CURRENT_STATUS", GridVal(GRID_STATUS, STAT_VOID)
+    PutText wsD, r, "CURRENT_STATUS", GridVal(GRID_STATUS, 5)
     PutText wsD, r, "VOID_FLAG", "TRUE"
     PutText wsD, r, "VOID_REASON", reason
     PutText wsD, r, "ROW_STATUS", GridVal(GRID_STAT, ST_VOID)
@@ -653,7 +606,6 @@ Public Sub QC_About()
     MsgBox "QC-F-14 " & QC_VERSION & vbCrLf & MsgFallback("ABOUT", "QC-F-14 v4 login + writepath") & vbCrLf & "rows: " & n, vbInformation, "QC-F-14"
 End Sub
 
-'--- write full v4 row ---
 Private Sub WriteRowV3(ByVal wsD As Worksheet, ByVal r As Long, ByVal jTxt As String, _
                        ByVal gSer As Long, ByVal mKey As Variant, ByVal wKey As Variant, _
                        ByVal shiftId As String, ByVal stCode As String, ByVal stName As String, _
@@ -910,7 +862,6 @@ Private Function UserName() As String
     If Not wsL Is Nothing Then
         cur = Trim$(CStr(wsL.Range("C12").Value))
         If Len(cur) > 0 And cur <> "(not logged in)" And InStr(cur, "not logged") = 0 Then
-            ' extract username before space or (
             Dim p As Long
             p = InStr(cur, " ")
             If p > 0 Then cur = Left$(cur, p - 1)
