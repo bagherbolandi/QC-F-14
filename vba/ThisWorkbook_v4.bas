@@ -1,6 +1,6 @@
-Attribute VB_Name = "ThisWorkbook"
 ' Place this code in ThisWorkbook module (double-click ThisWorkbook in VBA Project)
 ' It ensures only LOGIN is visible on open
+' NOTE: Do NOT paste the line 'Attribute VB_Name = ...' — paste only the Subs below
 
 Private Sub Workbook_Open()
     On Error Resume Next
